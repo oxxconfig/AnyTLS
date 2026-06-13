@@ -91,7 +91,7 @@ function handler_script_config() {
     if [[ -n "${CONFIG_DATA['password']}" ]]; then
         anytls_auth="${CONFIG_DATA['password']}"
     else
-        # 如果是 60 台 VPS 自动化静默安装，没有手工输入密码，则调用 openssl 自动下发 16 位强密码
+        # 自动化静默安装，没有手工输入密码，则调用 openssl 自动下发 16 位强密码
         anytls_auth="$(openssl rand -hex 16 2>/dev/null || echo "AnyTLSPassword2026")"
     fi
 
