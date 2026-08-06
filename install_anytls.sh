@@ -56,35 +56,41 @@ ANYTLS_PASSWORD=$(head /dev/urandom | tr -dc A-Za-z0-9 | head -c 16)
 SOCKS_USER="user_$(head /dev/urandom | tr -dc 0-9 | head -c 4)"
 SOCKS_PASS=$(head /dev/urandom | tr -dc A-Za-z0-9 | head -c 12)
 
-# 4. 自动申请 TLS 证书（带 CA 多重备用逻辑）
-echo -e "${BLUE}[*] 正在申请/更新 TLS 证书 (域名: ${DOMAIN})...${PLAIN}"
+# 4. 自动申请/复用 TLS 证书
+echo -e "${BLUE}[*] 正在检查/申请 TLS 证书 (域名: ${DOMAIN})...${PLAIN}"
 CERT_DIR="/etc/sing-box/cert"
 mkdir -p "${CERT_DIR}"
 CERT_PATH="${CERT_DIR}/${DOMAIN}.crt"
 KEY_PATH="${CERT_DIR}/${DOMAIN}.key"
 
-# 停止占用 80 端口的服务
-systemctl stop nginx &>/dev/null
-systemctl stop apache2 &>/dev/null
+# 检测本地是否已有现成的非空证书，有则直接复用
+if [ -s "$CERT_PATH" ] && [ -s "$KEY_PATH" ]; then
+    echo -e "${GREEN}[+] 检测到本地已存在域名 ${DOMAIN} 的有效证书，直接复用，跳过申请！${PLAIN}"
+else
+    # 停止占用 80 端口的服务
+    systemctl stop nginx &>/dev/null
+    systemctl stop apache2 &>/dev/null
 
-curl https://get.acme.sh | sh -s email=admin@${DOMAIN} &>/dev/null
-~/.acme.sh/acme.sh --upgrade --auto-upgrade &>/dev/null
+    curl https://get.acme.sh | sh -s email=admin@${DOMAIN} &>/dev/null
+    ~/.acme.sh/acme.sh --upgrade --auto-upgrade &>/dev/null
 
-# 尝试 Let's Encrypt 签发
-~/.acme.sh/acme.sh --set-default-ca --server letsencrypt
-~/.acme.sh/acme.sh --issue -d "${DOMAIN}" --standalone -k ec-256 --force
-
-# 如果 Let's Encrypt 失败（触发限额等），自动切换为 ZeroSSL 重新申请
-if [ ! -s "/root/.acme.sh/${DOMAIN}_ecc/fullchain.cer" ]; then
-    echo -e "${YELLOW}[!] Let's Encrypt 签发未成功（可能触发限额），正在自动切换至 ZeroSSL 尝试...${PLAIN}"
-    ~/.acme.sh/acme.sh --register-account -m "admin@${DOMAIN}" --server zerossl &>/dev/null
-    ~/.acme.sh/acme.sh --set-default-ca --server zerossl
+    # 优先用 Let's Encrypt
+    ~/.acme.sh/acme.sh --set-default-ca --server letsencrypt
     ~/.acme.sh/acme.sh --issue -d "${DOMAIN}" --standalone -k ec-256 --force
-fi
 
-~/.acme.sh/acme.sh --install-cert -d "${DOMAIN}" --ecc \
-    --fullchain-file "${CERT_PATH}" \
-    --key-file "${KEY_PATH}"
+    # 如果 Let's Encrypt 失败（触发 Rate Limit），自动降级为 ZeroSSL
+    if [ ! -s "/root/.acme.sh/${DOMAIN}_ecc/fullchain.cer" ]; then
+        echo -e "${YELLOW}[!] Let's Encrypt 申请失败（可能触发频次限制），自动切换至 ZeroSSL...${PLAIN}"
+        ~/.acme.sh/acme.sh --register-account -m "admin@${DOMAIN}" --server zerossl &>/dev/null
+        ~/.acme.sh/acme.sh --set-default-ca --server zerossl
+        ~/.acme.sh/acme.sh --issue -d "${DOMAIN}" --standalone -k ec-256 --force
+    fi
+
+    # 安装证书到指定目录
+    ~/.acme.sh/acme.sh --install-cert -d "${DOMAIN}" --ecc \
+        --fullchain-file "${CERT_PATH}" \
+        --key-file "${KEY_PATH}"
+fi
 
 # 5. 校验证书是否存在且非空
 if [ ! -s "$CERT_PATH" ] || [ ! -s "$KEY_PATH" ]; then
