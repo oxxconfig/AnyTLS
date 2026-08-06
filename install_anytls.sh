@@ -54,8 +54,10 @@ bash <(curl -fsSL https://sing-box.app/deb-install.sh) --prerelease
 
 # 生成随机账号密码
 ANYTLS_PASSWORD=$(head /dev/urandom | tr -dc A-Za-z0-9 | head -c 16)
-SOCKS_USER="user_$(head /dev/urandom | tr -dc 0-9 | head -c 4)"
-SOCKS_PASS=$(head /dev/urandom | tr -dc A-Za-z0-9 | head -c 12)
+# SOCKS_USER="user_$(head /dev/urandom | tr -dc 0-9 | head -c 4)"
+# SOCKS_PASS=$(head /dev/urandom | tr -dc A-Za-z0-9 | head -c 12)
+SOCKS_USER="TC"
+SOCKS_PASS="Tcnet@123456"
 
 # 4. 自动申请/复用 TLS 证书
 echo -e "${BLUE}[*] 正在检查/申请 TLS 证书 (域名: ${DOMAIN})...${PLAIN}"
