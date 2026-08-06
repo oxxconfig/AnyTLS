@@ -155,25 +155,32 @@ fi
 systemctl restart sing-box
 systemctl enable sing-box &>/dev/null
 
-# 8. 节点命名规则优化（提取二级域名 + 国旗 Flag）
+# 8. 节点命名规则优化（提取前 2 个字母，动态计算生成 Unicode 国旗 Emoji）
 SUB_DOMAIN=$(echo "${DOMAIN}" | cut -d'.' -f1)
 
-FLAG="🌐"
-LOWER_SUB=$(echo "${SUB_DOMAIN}" | tr '[:upper:]' '[:lower:]')
-case "${LOWER_SUB}" in
-    us*) FLAG="🇺🇸" ;;
-    hk*) FLAG="🇭🇰" ;;
-    jp*) FLAG="🇯🇵" ;;
-    sg*) FLAG="🇸🇬" ;;
-    tw*) FLAG="🇹🇼" ;;
-    kr*) FLAG="🇰🇷" ;;
-    uk*|gb*) FLAG="🇬🇧" ;;
-    de*) FLAG="🇩🇪" ;;
-    fr*) FLAG="🇫🇷" ;;
-    ca*) FLAG="🇨🇦" ;;
-    au*) FLAG="🇦🇺" ;;
-    ru*) FLAG="🇷🇺" ;;
-esac
+# 提取二级域名前 2 个字符并转大写 (例如 us003 -> US, nl01 -> NL)
+COUNTRY_CODE=$(echo "${SUB_DOMAIN:0:2}" | tr '[:lower:]' '[:upper:]')
+
+# 校验前两位是否为 2 个纯字母
+if [[ "$COUNTRY_CODE" =~ ^[A-Z]{2}$ ]]; then
+    # 提取第 1 和第 2 个字母的 ASCII Code
+    CHAR1=$(printf '%d' "'${COUNTRY_CODE:0:1}")
+    CHAR2=$(printf '%d' "'${COUNTRY_CODE:1:1}")
+
+    # 计算对应的 Regional Indicator Symbol Unicode ( Base = 0x1F1A6 - 65 = 127397 )
+    HEX1=$(printf 'U+%X' $(( CHAR1 + 127397 )))
+    HEX2=$(printf 'U+%X' $(( CHAR2 + 127397 )))
+
+    # 转换生成国旗 Emoji
+    FLAG=$(printf "%b%b" "\U${HEX1#U+}" "\U${HEX2#U+}")
+else
+    FLAG="🌐"
+fi
+
+# 针对特殊域名（如 uk/gb）的防错兼容（如需要可加，不需要直接用上面计算出来的即可）
+if [ "$COUNTRY_CODE" == "UK" ]; then
+    FLAG="🇬🇧"
+fi
 
 NODE_NAME="${FLAG}${SUB_DOMAIN}"
 ENCODED_NODE_NAME=$(echo -n "${NODE_NAME}" | jq -sRr @uri)
