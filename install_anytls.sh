@@ -204,15 +204,15 @@ cat <<EOF > /etc/sing-box/info.txt
        Sing-box AnyTLS + Socks5 部署信息
 ====================================================
 1. 【Socks5 节点一键导入链接】
-   (适用客户端：安卓 v2rayNG / 苹果 Shadowrocket / NekoBox)
+   (适用客户端：苹果 Shadowrocket / 安卓 v2rayNG 、 NekoBox)
 ${SOCKS5_URL}
 ----------------------------------------------------
-2. 【Shadowrocket 苹果小火箭 AnyTLS 专用链接】
-   (适用客户端：苹果 Shadowrocket)
+2. 【AnyTLS Shadowrocket 苹果小火箭 / NekoBox 客户端】
+   (适用客户端：苹果 Shadowrocket / 安卓 NekoBox)
 ${ANYTLS_URL}
 ----------------------------------------------------
-3. 【Sing-box / NekoBox 客户端 AnyTLS Outbound JSON】
-   (适用客户端：安卓 Sing-box / NekoBox / Clash Verge)
+3. 【Sing-box AnyTLS Outbound JSON】
+   (适用客户端：安卓 Sing-box / Clash Verge)
 ${CLIENT_JSON}
 ====================================================
 EOF
