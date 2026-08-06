@@ -30,7 +30,7 @@ rm -rf /etc/sing-box /var/lib/sing-box /usr/local/bin/info /usr/local/bin/anytls
 
 echo -e "${GREEN}[+] 环境清理完成，开始重新部署 Sing-box AnyTLS + Socks5 服务...${PLAIN}"
 
-# 2. 检查并获取域名（若未通过参数传入，则提示手动输入）
+# 2. 检查并获取域名
 if [ -z "$DOMAIN" ] || [ "$DOMAIN" == "yourdomain.com" ]; then
     echo -e "${YELLOW}[!] 未检测到有效域名参数，请输入手动配置：${PLAIN}"
     read -p "请输入解析到本机 IP 的域名 (必须): " DOMAIN
@@ -56,7 +56,7 @@ ANYTLS_PASSWORD=$(head /dev/urandom | tr -dc A-Za-z0-9 | head -c 16)
 SOCKS_USER="user_$(head /dev/urandom | tr -dc 0-9 | head -c 4)"
 SOCKS_PASS=$(head /dev/urandom | tr -dc A-Za-z0-9 | head -c 12)
 
-# 4. 自动申请 TLS 证书
+# 4. 自动申请 TLS 证书（带 CA 多重备用逻辑）
 echo -e "${BLUE}[*] 正在申请/更新 TLS 证书 (域名: ${DOMAIN})...${PLAIN}"
 CERT_DIR="/etc/sing-box/cert"
 mkdir -p "${CERT_DIR}"
@@ -69,8 +69,18 @@ systemctl stop apache2 &>/dev/null
 
 curl https://get.acme.sh | sh -s email=admin@${DOMAIN} &>/dev/null
 ~/.acme.sh/acme.sh --upgrade --auto-upgrade &>/dev/null
+
+# 尝试 Let's Encrypt 签发
 ~/.acme.sh/acme.sh --set-default-ca --server letsencrypt
 ~/.acme.sh/acme.sh --issue -d "${DOMAIN}" --standalone -k ec-256 --force
+
+# 如果 Let's Encrypt 失败（触发限额等），自动切换为 ZeroSSL 重新申请
+if [ ! -s "/root/.acme.sh/${DOMAIN}_ecc/fullchain.cer" ]; then
+    echo -e "${YELLOW}[!] Let's Encrypt 签发未成功（可能触发限额），正在自动切换至 ZeroSSL 尝试...${PLAIN}"
+    ~/.acme.sh/acme.sh --register-account -m "admin@${DOMAIN}" --server zerossl &>/dev/null
+    ~/.acme.sh/acme.sh --set-default-ca --server zerossl
+    ~/.acme.sh/acme.sh --issue -d "${DOMAIN}" --standalone -k ec-256 --force
+fi
 
 ~/.acme.sh/acme.sh --install-cert -d "${DOMAIN}" --ecc \
     --fullchain-file "${CERT_PATH}" \
@@ -155,29 +165,20 @@ fi
 systemctl restart sing-box
 systemctl enable sing-box &>/dev/null
 
-# 8. 节点命名规则优化（提取前 2 个字母，动态计算生成 Unicode 国旗 Emoji）
+# 8. 节点命名规则优化（前2位 Unicode 动态计算国旗 Emoji）
 SUB_DOMAIN=$(echo "${DOMAIN}" | cut -d'.' -f1)
-
-# 提取二级域名前 2 个字符并转大写 (例如 us003 -> US, nl01 -> NL)
 COUNTRY_CODE=$(echo "${SUB_DOMAIN:0:2}" | tr '[:lower:]' '[:upper:]')
 
-# 校验前两位是否为 2 个纯字母
 if [[ "$COUNTRY_CODE" =~ ^[A-Z]{2}$ ]]; then
-    # 提取第 1 和第 2 个字母的 ASCII Code
     CHAR1=$(printf '%d' "'${COUNTRY_CODE:0:1}")
     CHAR2=$(printf '%d' "'${COUNTRY_CODE:1:1}")
-
-    # 计算对应的 Regional Indicator Symbol Unicode ( Base = 0x1F1A6 - 65 = 127397 )
     HEX1=$(printf 'U+%X' $(( CHAR1 + 127397 )))
     HEX2=$(printf 'U+%X' $(( CHAR2 + 127397 )))
-
-    # 转换生成国旗 Emoji
     FLAG=$(printf "%b%b" "\U${HEX1#U+}" "\U${HEX2#U+}")
 else
     FLAG="🌐"
 fi
 
-# 针对特殊域名（如 uk/gb）的防错兼容（如需要可加，不需要直接用上面计算出来的即可）
 if [ "$COUNTRY_CODE" == "UK" ]; then
     FLAG="🇬🇧"
 fi
