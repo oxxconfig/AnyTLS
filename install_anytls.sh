@@ -23,7 +23,7 @@ done
 
 echo -e "${YELLOW}[*] 正在检查并清理旧的 Sing-box 部署环境...${PLAIN}"
 
-# 停止并清理旧服务（注意：这里仅清理配置文件，严格保留 /etc/sing-box/cert 目录）
+# 停止并清理旧服务（安全保留 /etc/sing-box/cert 证书）
 systemctl stop sing-box &>/dev/null
 systemctl disable sing-box &>/dev/null
 rm -f /etc/sing-box/config.json /etc/sing-box/info.txt
@@ -68,7 +68,6 @@ KEY_PATH="${CERT_DIR}/${DOMAIN}.key"
 if [ -s "$CERT_PATH" ] && [ -s "$KEY_PATH" ]; then
     echo -e "${GREEN}[+] 检测到本地已存在有效的 TLS 证书，直接复用，跳过网络申请！${PLAIN}"
 else
-    # 停止占用 80 端口的服务
     systemctl stop nginx &>/dev/null
     systemctl stop apache2 &>/dev/null
 
@@ -87,7 +86,6 @@ else
         ~/.acme.sh/acme.sh --issue -d "${DOMAIN}" --standalone -k ec-256 --force
     fi
 
-    # 安装证书到 /etc/sing-box/cert
     ~/.acme.sh/acme.sh --install-cert -d "${DOMAIN}" --ecc \
         --fullchain-file "${CERT_PATH}" \
         --key-file "${KEY_PATH}"
@@ -213,6 +211,17 @@ CLIENT_JSON=$(cat <<EOF
 EOF
 )
 
+OPENCLASH_YAML=$(cat <<EOF
+- name: "${NODE_NAME}"
+  type: anytls
+  server: ${DOMAIN}
+  port: ${PORT}
+  password: "${ANYTLS_PASSWORD}"
+  sni: ${DOMAIN}
+  skip-cert-verify: false
+EOF
+)
+
 # 9. 保存带高亮色彩的信息文件与快捷脚本 info
 echo -e "\033[32m====================================================\033[0m
 \033[32m       Sing-box AnyTLS + Socks5 部署信息          \033[0m
@@ -225,8 +234,12 @@ echo -e "\033[32m====================================================\033[0m
 \033[33m   (适用客户端：苹果 Shadowrocket / 安卓 NekoBox)\033[0m
 \033[32m${ANYTLS_URL}\033[0m
 ----------------------------------------------------
-\033[33m3. 【Sing-box AnyTLS Outbound JSON】\033[0m
-\033[33m   (适用客户端：安卓 Sing-box / Clash Verge)\033[0m
+\033[33m3. 【OpenClash / Mihomo 节点 YAML 配置】\033[0m
+\033[33m   (适用客户端：OpenClash / Clash Verge Rev / Flclash)\033[0m
+\033[35m${OPENCLASH_YAML}\033[0m
+----------------------------------------------------
+\033[33m4. 【Sing-box AnyTLS Outbound JSON】\033[0m
+\033[33m   (适用客户端：安卓 Sing-box / SBOX)\033[0m
 \033[36m${CLIENT_JSON}\033[0m
 \033[32m====================================================\033[0m" > /etc/sing-box/info.txt
 
