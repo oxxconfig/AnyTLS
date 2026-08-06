@@ -21,7 +21,14 @@ while getopts "d:p:s:" opt; do
   esac
 done
 
-echo -e "${GREEN}[+] 开始部署 Sing-box AnyTLS + Socks5 服务...${PLAIN}"
+echo -e "${YELLOW}[*] 正在检查并清理旧的 Sing-box 部署环境...${PLAIN}"
+
+# 停止并清理旧服务
+systemctl stop sing-box &>/dev/null
+systemctl disable sing-box &>/dev/null
+rm -rf /etc/sing-box /var/lib/sing-box /usr/local/bin/info /usr/local/bin/anytls
+
+echo -e "${GREEN}[+] 环境清理完成，开始重新部署 Sing-box AnyTLS + Socks5 服务...${PLAIN}"
 
 # 2. 检查并获取域名（若未通过参数传入，则提示手动输入）
 if [ -z "$DOMAIN" ] || [ "$DOMAIN" == "yourdomain.com" ]; then
@@ -50,7 +57,7 @@ SOCKS_USER="user_$(head /dev/urandom | tr -dc 0-9 | head -c 4)"
 SOCKS_PASS=$(head /dev/urandom | tr -dc A-Za-z0-9 | head -c 12)
 
 # 4. 自动申请 TLS 证书
-echo -e "${BLUE}[*] 正在申请 TLS 证书 (域名: ${DOMAIN})...${PLAIN}"
+echo -e "${BLUE}[*] 正在申请/更新 TLS 证书 (域名: ${DOMAIN})...${PLAIN}"
 CERT_DIR="/etc/sing-box/cert"
 mkdir -p "${CERT_DIR}"
 CERT_PATH="${CERT_DIR}/${DOMAIN}.crt"
@@ -63,7 +70,7 @@ systemctl stop apache2 &>/dev/null
 curl https://get.acme.sh | sh -s email=admin@${DOMAIN} &>/dev/null
 ~/.acme.sh/acme.sh --upgrade --auto-upgrade &>/dev/null
 ~/.acme.sh/acme.sh --set-default-ca --server letsencrypt
-~/.acme.sh/acme.sh --issue -d "${DOMAIN}" --standalone -k ec-256
+~/.acme.sh/acme.sh --issue -d "${DOMAIN}" --standalone -k ec-256 --force
 
 ~/.acme.sh/acme.sh --install-cert -d "${DOMAIN}" --ecc \
     --fullchain-file "${CERT_PATH}" \
@@ -148,20 +155,38 @@ fi
 systemctl restart sing-box
 systemctl enable sing-box &>/dev/null
 
-# 8. 生成各种格式的一键导入链接
+# 8. 节点命名规则优化（提取二级域名 + 国旗 Flag）
+SUB_DOMAIN=$(echo "${DOMAIN}" | cut -d'.' -f1)
 
-# [链接 1] Socks5 通用标准链接 (支持 v2rayNG / Shadowrocket / NekoBox)
+FLAG="🌐"
+LOWER_SUB=$(echo "${SUB_DOMAIN}" | tr '[:upper:]' '[:lower:]')
+case "${LOWER_SUB}" in
+    us*) FLAG="🇺🇸" ;;
+    hk*) FLAG="🇭🇰" ;;
+    jp*) FLAG="🇯🇵" ;;
+    sg*) FLAG="🇸🇬" ;;
+    tw*) FLAG="🇹🇼" ;;
+    kr*) FLAG="🇰🇷" ;;
+    uk*|gb*) FLAG="🇬🇧" ;;
+    de*) FLAG="🇩🇪" ;;
+    fr*) FLAG="🇫🇷" ;;
+    ca*) FLAG="🇨🇦" ;;
+    au*) FLAG="🇦🇺" ;;
+    ru*) FLAG="🇷🇺" ;;
+esac
+
+NODE_NAME="${FLAG}${SUB_DOMAIN}"
+ENCODED_NODE_NAME=$(echo -n "${NODE_NAME}" | jq -sRr @uri)
+
+# 生成一键导入链接
 SOCKS5_USER_PASS_B64=$(echo -n "${SOCKS_USER}:${SOCKS_PASS}" | base64 -w 0)
-SOCKS5_URL="socks://${SOCKS5_USER_PASS_B64}@${DOMAIN}:${SOCKS_PORT}#Socks5-${DOMAIN}"
+SOCKS5_URL="socks://${SOCKS5_USER_PASS_B64}@${DOMAIN}:${SOCKS_PORT}#${ENCODED_NODE_NAME}-Socks5"
+ANYTLS_URL="anytls://${ANYTLS_PASSWORD}@${DOMAIN}:${PORT}?peer=${DOMAIN}&sni=${DOMAIN}#${ENCODED_NODE_NAME}"
 
-# [链接 2] AnyTLS 小火箭 (Shadowrocket) 专用一键导入链接
-ANYTLS_URL="anytls://${ANYTLS_PASSWORD}@${DOMAIN}:${PORT}?peer=${DOMAIN}&sni=${DOMAIN}#AnyTLS-${DOMAIN}"
-
-# [配置 3] Sing-box / NekoBox 客户端原生的 AnyTLS Outbound 配置 (用于安卓/iOS Sing-box)
 CLIENT_JSON=$(cat <<EOF
 {
   "type": "anytls",
-  "tag": "AnyTLS-${DOMAIN}",
+  "tag": "${NODE_NAME}",
   "server": "${DOMAIN}",
   "server_port": ${PORT},
   "password": "${ANYTLS_PASSWORD}",
@@ -173,22 +198,38 @@ CLIENT_JSON=$(cat <<EOF
 EOF
 )
 
-# 打印最终配置输出
-echo -e "${GREEN}====================================================${PLAIN}"
-echo -e "${GREEN}       Sing-box AnyTLS + Socks5 部署成功！          ${PLAIN}"
-echo -e "${GREEN}====================================================${PLAIN}"
-echo -e "${YELLOW}1. 【Socks5 节点一键导入链接】${PLAIN}"
-echo -e "   (适用客户端：安卓 v2rayNG / 苹果 Shadowrocket / NekoBox)"
-echo -e "${GREEN}${SOCKS5_URL}${PLAIN}"
-echo -e "----------------------------------------------------"
-echo -e "${YELLOW}2. 【Shadowrocket 苹果小火箭 AnyTLS 专用链接】${PLAIN}"
-echo -e "   (适用客户端：苹果 Shadowrocket)"
-echo -e "${GREEN}${ANYTLS_URL}${PLAIN}"
-echo -e "----------------------------------------------------"
-echo -e "${YELLOW}3. 【Sing-box / NekoBox 客户端 AnyTLS Outbound JSON】${PLAIN}"
-echo -e "   (适用客户端：安卓 Sing-box / NekoBox / Clash Verge)"
-echo -e "${BLUE}${CLIENT_JSON}${PLAIN}"
-echo -e "${GREEN}====================================================${PLAIN}"
-echo -e "${RED}注：由于 AnyTLS 为 Sing-box 独有协议，v2rayNG 目前内核不支持 AnyTLS。${PLAIN}"
-echo -e "${RED}    若需在安卓使用 AnyTLS 请配置 Sing-box 或使用上述 Socks5 节点。${PLAIN}"
+# 9. 保存信息文件并设置快捷打印脚本 info
+cat <<EOF > /etc/sing-box/info.txt
+====================================================
+       Sing-box AnyTLS + Socks5 部署信息
+====================================================
+1. 【Socks5 节点一键导入链接】
+   (适用客户端：安卓 v2rayNG / 苹果 Shadowrocket / NekoBox)
+${SOCKS5_URL}
+----------------------------------------------------
+2. 【Shadowrocket 苹果小火箭 AnyTLS 专用链接】
+   (适用客户端：苹果 Shadowrocket)
+${ANYTLS_URL}
+----------------------------------------------------
+3. 【Sing-box / NekoBox 客户端 AnyTLS Outbound JSON】
+   (适用客户端：安卓 Sing-box / NekoBox / Clash Verge)
+${CLIENT_JSON}
+====================================================
+EOF
+
+# 创建快捷命令 `/usr/local/bin/info`
+cat <<'EOF' > /usr/local/bin/info
+#!/bin/bash
+if [ -f /etc/sing-box/info.txt ]; then
+    cat /etc/sing-box/info.txt
+else
+    echo "未检测到 Sing-box 配置信息，请重新运行安装脚本。"
+fi
+EOF
+
+chmod +x /usr/local/bin/info
+
+# 10. 打印最终配置输出
+cat /etc/sing-box/info.txt
+echo -e "${YELLOW}[提示] 后续随时输入 ${GREEN}info${YELLOW} 命令，即可重新打印以上节点信息！${PLAIN}"
 echo -e "${GREEN}====================================================${PLAIN}"
