@@ -148,13 +148,20 @@ fi
 systemctl restart sing-box
 systemctl enable sing-box &>/dev/null
 
-# 8. 生成分享链接与输出
-ANYTLS_URL="anytls://${ANYTLS_PASSWORD}@${DOMAIN}:${PORT}?sni=${DOMAIN}#AnyTLS-${DOMAIN}"
+# 8. 生成各种格式的一键导入链接
 
+# [链接 1] Socks5 通用标准链接 (支持 v2rayNG / Shadowrocket / NekoBox)
+SOCKS5_USER_PASS_B64=$(echo -n "${SOCKS_USER}:${SOCKS_PASS}" | base64 -w 0)
+SOCKS5_URL="socks://${SOCKS5_USER_PASS_B64}@${DOMAIN}:${SOCKS_PORT}#Socks5-${DOMAIN}"
+
+# [链接 2] AnyTLS 小火箭 (Shadowrocket) 专用一键导入链接
+ANYTLS_URL="anytls://${ANYTLS_PASSWORD}@${DOMAIN}:${PORT}?peer=${DOMAIN}&sni=${DOMAIN}#AnyTLS-${DOMAIN}"
+
+# [配置 3] Sing-box / NekoBox 客户端原生的 AnyTLS Outbound 配置 (用于安卓/iOS Sing-box)
 CLIENT_JSON=$(cat <<EOF
 {
   "type": "anytls",
-  "tag": "AnyTLS-Node",
+  "tag": "AnyTLS-${DOMAIN}",
   "server": "${DOMAIN}",
   "server_port": ${PORT},
   "password": "${ANYTLS_PASSWORD}",
@@ -166,24 +173,22 @@ CLIENT_JSON=$(cat <<EOF
 EOF
 )
 
+# 打印最终配置输出
 echo -e "${GREEN}====================================================${PLAIN}"
 echo -e "${GREEN}       Sing-box AnyTLS + Socks5 部署成功！          ${PLAIN}"
 echo -e "${GREEN}====================================================${PLAIN}"
-echo -e "${YELLOW}[ AnyTLS 节点基础信息 ]${PLAIN}"
-echo -e "  服务端地址 (Address) : ${DOMAIN}"
-echo -e "  端口 (Port)           : ${PORT}"
-echo -e "  密码 (Password)       : ${ANYTLS_PASSWORD}"
-echo -e "  伪装域名 (SNI)        : ${DOMAIN}"
+echo -e "${YELLOW}1. 【Socks5 节点一键导入链接】${PLAIN}"
+echo -e "   (适用客户端：安卓 v2rayNG / 苹果 Shadowrocket / NekoBox)"
+echo -e "${GREEN}${SOCKS5_URL}${PLAIN}"
 echo -e "----------------------------------------------------"
-echo -e "${YELLOW}[ AnyTLS 一键 URL 链接 ]${PLAIN}"
+echo -e "${YELLOW}2. 【Shadowrocket 苹果小火箭 AnyTLS 专用链接】${PLAIN}"
+echo -e "   (适用客户端：苹果 Shadowrocket)"
 echo -e "${GREEN}${ANYTLS_URL}${PLAIN}"
 echo -e "----------------------------------------------------"
-echo -e "${YELLOW}[ Sing-box 客户端 JSON Outbound 配置 ]${PLAIN}"
+echo -e "${YELLOW}3. 【Sing-box / NekoBox 客户端 AnyTLS Outbound JSON】${PLAIN}"
+echo -e "   (适用客户端：安卓 Sing-box / NekoBox / Clash Verge)"
 echo -e "${BLUE}${CLIENT_JSON}${PLAIN}"
-echo -e "----------------------------------------------------"
-echo -e "${YELLOW}[ Socks5 节点配置 ]${PLAIN}"
-echo -e "  服务器地址 (IP/Domain): ${DOMAIN}"
-echo -e "  端口 (Port)           : ${SOCKS_PORT}"
-echo -e "  用户名 (User)         : ${SOCKS_USER}"
-echo -e "  密码 (Password)       : ${SOCKS_PASS}"
+echo -e "${GREEN}====================================================${PLAIN}"
+echo -e "${RED}注：由于 AnyTLS 为 Sing-box 独有协议，v2rayNG 目前内核不支持 AnyTLS。${PLAIN}"
+echo -e "${RED}    若需在安卓使用 AnyTLS 请配置 Sing-box 或使用上述 Socks5 节点。${PLAIN}"
 echo -e "${GREEN}====================================================${PLAIN}"
