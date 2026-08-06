@@ -23,10 +23,11 @@ done
 
 echo -e "${YELLOW}[*] 正在检查并清理旧的 Sing-box 部署环境...${PLAIN}"
 
-# 停止并清理旧服务
+# 停止并清理旧服务（注意：这里仅清理配置文件，严格保留 /etc/sing-box/cert 目录）
 systemctl stop sing-box &>/dev/null
 systemctl disable sing-box &>/dev/null
-rm -rf /etc/sing-box /var/lib/sing-box /usr/local/bin/info /usr/local/bin/anytls
+rm -f /etc/sing-box/config.json /etc/sing-box/info.txt
+rm -rf /var/lib/sing-box /usr/local/bin/info /usr/local/bin/anytls
 
 echo -e "${GREEN}[+] 环境清理完成，开始重新部署 Sing-box AnyTLS + Socks5 服务...${PLAIN}"
 
@@ -63,9 +64,9 @@ mkdir -p "${CERT_DIR}"
 CERT_PATH="${CERT_DIR}/${DOMAIN}.crt"
 KEY_PATH="${CERT_DIR}/${DOMAIN}.key"
 
-# 检测本地是否已有现成的非空证书，有则直接复用
+# 优先判断：如果本地已存在且不为空，直接复用！
 if [ -s "$CERT_PATH" ] && [ -s "$KEY_PATH" ]; then
-    echo -e "${GREEN}[+] 检测到本地已存在域名 ${DOMAIN} 的有效证书，直接复用，跳过申请！${PLAIN}"
+    echo -e "${GREEN}[+] 检测到本地已存在有效的 TLS 证书，直接复用，跳过网络申请！${PLAIN}"
 else
     # 停止占用 80 端口的服务
     systemctl stop nginx &>/dev/null
@@ -74,25 +75,25 @@ else
     curl https://get.acme.sh | sh -s email=admin@${DOMAIN} &>/dev/null
     ~/.acme.sh/acme.sh --upgrade --auto-upgrade &>/dev/null
 
-    # 优先用 Let's Encrypt
+    # 尝试 1：Let's Encrypt
     ~/.acme.sh/acme.sh --set-default-ca --server letsencrypt
     ~/.acme.sh/acme.sh --issue -d "${DOMAIN}" --standalone -k ec-256 --force
 
-    # 如果 Let's Encrypt 失败（触发 Rate Limit），自动降级为 ZeroSSL
+    # 尝试 2：如果 Let's Encrypt 失败（触发频次限制），自动切换至 ZeroSSL
     if [ ! -s "/root/.acme.sh/${DOMAIN}_ecc/fullchain.cer" ]; then
-        echo -e "${YELLOW}[!] Let's Encrypt 申请失败（可能触发频次限制），自动切换至 ZeroSSL...${PLAIN}"
+        echo -e "${YELLOW}[!] Let's Encrypt 申请失败（可能触发限额），自动切换至 ZeroSSL...${PLAIN}"
         ~/.acme.sh/acme.sh --register-account -m "admin@${DOMAIN}" --server zerossl &>/dev/null
         ~/.acme.sh/acme.sh --set-default-ca --server zerossl
         ~/.acme.sh/acme.sh --issue -d "${DOMAIN}" --standalone -k ec-256 --force
     fi
 
-    # 安装证书到指定目录
+    # 安装证书到 /etc/sing-box/cert
     ~/.acme.sh/acme.sh --install-cert -d "${DOMAIN}" --ecc \
         --fullchain-file "${CERT_PATH}" \
         --key-file "${KEY_PATH}"
 fi
 
-# 5. 校验证书是否存在且非空
+# 5. 校验证书文件是否存在
 if [ ! -s "$CERT_PATH" ] || [ ! -s "$KEY_PATH" ]; then
     echo -e "${RED}[-] 错误：TLS 证书生成失败！${PLAIN}"
     echo -e "${YELLOW}[!] 请确认：${PLAIN}"
@@ -171,7 +172,7 @@ fi
 systemctl restart sing-box
 systemctl enable sing-box &>/dev/null
 
-# 8. 节点命名规则优化（前2位 Unicode 动态计算国旗 Emoji）
+# 8. 节点命名规则优化（Unicode 动态国旗 Emoji）
 SUB_DOMAIN=$(echo "${DOMAIN}" | cut -d'.' -f1)
 COUNTRY_CODE=$(echo "${SUB_DOMAIN:0:2}" | tr '[:lower:]' '[:upper:]')
 
