@@ -138,7 +138,7 @@ cat <<EOF > /etc/sing-box/config.json
 }
 EOF
 
-# 7. 校验并启动
+# 7. 校验并启动服务
 sing-box check -c /etc/sing-box/config.json
 if [ $? -ne 0 ]; then
     echo -e "${RED}[-] 配置文件校验失败！${PLAIN}"
@@ -148,14 +148,38 @@ fi
 systemctl restart sing-box
 systemctl enable sing-box &>/dev/null
 
+# 8. 生成分享链接与输出
+ANYTLS_URL="anytls://${ANYTLS_PASSWORD}@${DOMAIN}:${PORT}?sni=${DOMAIN}#AnyTLS-${DOMAIN}"
+
+CLIENT_JSON=$(cat <<EOF
+{
+  "type": "anytls",
+  "tag": "AnyTLS-Node",
+  "server": "${DOMAIN}",
+  "server_port": ${PORT},
+  "password": "${ANYTLS_PASSWORD}",
+  "tls": {
+    "enabled": true,
+    "server_name": "${DOMAIN}"
+  }
+}
+EOF
+)
+
 echo -e "${GREEN}====================================================${PLAIN}"
 echo -e "${GREEN}       Sing-box AnyTLS + Socks5 部署成功！          ${PLAIN}"
 echo -e "${GREEN}====================================================${PLAIN}"
-echo -e "${YELLOW}[ AnyTLS 节点配置 ]${PLAIN}"
+echo -e "${YELLOW}[ AnyTLS 节点基础信息 ]${PLAIN}"
 echo -e "  服务端地址 (Address) : ${DOMAIN}"
 echo -e "  端口 (Port)           : ${PORT}"
 echo -e "  密码 (Password)       : ${ANYTLS_PASSWORD}"
 echo -e "  伪装域名 (SNI)        : ${DOMAIN}"
+echo -e "----------------------------------------------------"
+echo -e "${YELLOW}[ AnyTLS 一键 URL 链接 ]${PLAIN}"
+echo -e "${GREEN}${ANYTLS_URL}${PLAIN}"
+echo -e "----------------------------------------------------"
+echo -e "${YELLOW}[ Sing-box 客户端 JSON Outbound 配置 ]${PLAIN}"
+echo -e "${BLUE}${CLIENT_JSON}${PLAIN}"
 echo -e "----------------------------------------------------"
 echo -e "${YELLOW}[ Socks5 节点配置 ]${PLAIN}"
 echo -e "  服务器地址 (IP/Domain): ${DOMAIN}"
