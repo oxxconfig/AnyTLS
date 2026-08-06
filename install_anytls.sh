@@ -100,7 +100,7 @@ if [ ! -s "$CERT_PATH" ] || [ ! -s "$KEY_PATH" ]; then
     exit 1
 fi
 
-# 6. 生成配置文件（已修复 web-fallback 的 override_port 为 80 端口）
+# 6. 生成配置文件（彻底移除无用的 detour / web-fallback，解决转发拦截和 UDP 报错）
 echo -e "${BLUE}[*] 正在配置 Sing-box 服务...${PLAIN}"
 mkdir -p /etc/sing-box/
 
@@ -127,16 +127,7 @@ cat <<EOF > /etc/sing-box/config.json
         "server_name": "${DOMAIN}",
         "certificate_path": "${CERT_PATH}",
         "key_path": "${KEY_PATH}"
-      },
-      "detour": "web-fallback"
-    },
-    {
-      "type": "direct",
-      "tag": "web-fallback",
-      "listen": "127.0.0.1",
-      "listen_port": 10080,
-      "override_address": "bing.com",
-      "override_port": 80
+      }
     },
     {
       "type": "socks",
@@ -194,11 +185,12 @@ ENCODED_NODE_NAME=$(echo -n "${NODE_NAME}" | jq -sRr @uri)
 # 生成一键导入链接与各类配置格式
 SOCKS5_USER_PASS_B64=$(echo -n "${SOCKS_USER}:${SOCKS_PASS}" | base64 -w 0)
 SOCKS5_URL="socks://${SOCKS5_USER_PASS_B64}@${DOMAIN}:${SOCKS_PORT}#${ENCODED_NODE_NAME}"
-ANYTLS_URL="anytls://${ANYTLS_PASSWORD}@${DOMAIN}:${PORT}?peer=${DOMAIN}&sni=${DOMAIN}&fp=chrome#${ENCODED_NODE_NAME}"
 
-# 1. OpenClash / Mihomo 单行 Inline YAML 格式
-OPENCLASH_INLINE="- { name: \"${NODE_NAME}\", type: anytls, server: ${DOMAIN}, port: ${PORT}, password: \"${ANYTLS_PASSWORD}\", sni: ${DOMAIN}, client-fingerprint: chrome, udp: true, skip-cert-verify: false}"
-# 2. Sing-box Outbound JSON 格式
+# 补全指纹控制参数：URL 增加 &fp=chrome，YAML 增加 client-fingerprint: chrome
+ANYTLS_URL="anytls://${ANYTLS_PASSWORD}@${DOMAIN}:${PORT}?peer=${DOMAIN}&sni=${DOMAIN}&fp=chrome#${ENCODED_NODE_NAME}"
+OPENCLASH_INLINE="- {name: \"${NODE_NAME}\", type: anytls, server: ${DOMAIN}, port: ${PORT}, password: \"${ANYTLS_PASSWORD}\", sni: ${DOMAIN}, client-fingerprint: chrome, udp: true, skip-cert-verify: false}"
+
+# Sing-box Outbound JSON 格式
 CLIENT_JSON=$(cat <<EOF
 {
   "type": "anytls",
@@ -208,7 +200,11 @@ CLIENT_JSON=$(cat <<EOF
   "password": "${ANYTLS_PASSWORD}",
   "tls": {
     "enabled": true,
-    "server_name": "${DOMAIN}"
+    "server_name": "${DOMAIN}",
+    "utls": {
+      "enabled": true,
+      "fingerprint": "chrome"
+    }
   }
 }
 EOF
