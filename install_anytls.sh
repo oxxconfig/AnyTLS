@@ -188,7 +188,7 @@ SOCKS5_URL="socks://${SOCKS5_USER_PASS_B64}@${DOMAIN}:${SOCKS_PORT}#${ENCODED_NO
 
 # 补全指纹控制参数：URL 增加 &fp=chrome，YAML 增加 client-fingerprint: chrome
 ANYTLS_URL="anytls://${ANYTLS_PASSWORD}@${DOMAIN}:${PORT}?peer=${DOMAIN}&sni=${DOMAIN}&fp=chrome#${ENCODED_NODE_NAME}"
-OPENCLASH_INLINE="- {name: \"${NODE_NAME}\", type: anytls, server: ${DOMAIN}, port: ${PORT}, password: \"${ANYTLS_PASSWORD}\", sni: ${DOMAIN}, client-fingerprint: chrome, udp: true, skip-cert-verify: false}"
+OPENCLASH_INLINE="- { name: \"${NODE_NAME}\", type: anytls, server: ${DOMAIN}, port: ${PORT}, password: \"${ANYTLS_PASSWORD}\", sni: ${DOMAIN}, client-fingerprint: chrome, udp: true, skip-cert-verify: false}"
 
 # Sing-box Outbound JSON 格式
 CLIENT_JSON=$(cat <<EOF
