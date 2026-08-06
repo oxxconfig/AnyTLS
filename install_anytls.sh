@@ -100,7 +100,7 @@ if [ ! -s "$CERT_PATH" ] || [ ! -s "$KEY_PATH" ]; then
     exit 1
 fi
 
-# 6. 生成配置文件
+# 6. 生成配置文件（已修复 web-fallback 的 override_port 为 80 端口）
 echo -e "${BLUE}[*] 正在配置 Sing-box 服务...${PLAIN}"
 mkdir -p /etc/sing-box/
 
@@ -136,7 +136,7 @@ cat <<EOF > /etc/sing-box/config.json
       "listen": "127.0.0.1",
       "listen_port": 10080,
       "override_address": "bing.com",
-      "override_port": 443
+      "override_port": 80
     },
     {
       "type": "socks",
