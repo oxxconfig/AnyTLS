@@ -1,61 +1,89 @@
 #!/bin/bash
 
-# 修正并优化后的 AnyTLS + Socks5 一键部署函数
-function install_anytls_and_socks5() {
-    echo -e "\033[1;32m[+] 开始部署 AnyTLS + Socks5 节点...\033[0m"
+# 设置颜色变量
+RED="\033[31m"
+GREEN="\033[32m"
+YELLOW="\033[33m"
+BLUE="\033[34m"
+PLAIN="\033[0m"
 
-    # 1. 安装基础依赖与 sing-box 预发版 (AnyTLS 需 1.11.0+)
-    echo -e "\033[1;34m[*] 检查依赖及安装最新 Sing-box 核心...\033[0m"
-    apt-get update && apt-get install -y curl socat cron tar jq &> /dev/null || yum install -y curl socat crontabs tar jq &> /dev/null
-    
-    # 强制安装/更新支持 AnyTLS 的 Sing-box 预发版本 (pre-release)
-    bash <(curl -fsSL https://sing-box.app/deb-install.sh) --prerelease
+# 默认变量值
+DOMAIN=""
+PORT=443
+SOCKS_PORT=1080
 
-    # 2. 交互/自动获取变量
-    read -p "请输入解析到本机 IP 的域名: " DOMAIN
-    if [ -z "$DOMAIN" ]; then
-        echo -e "\033[1;31m[-] 必须输入有效域名！部署终止。\033[0m"
-        return 1
-    fi
+# 1. 接收命令行参数 (例如: bash install_anytls.sh -d example.com -p 8443)
+while getopts "d:p:s:" opt; do
+  case $opt in
+    d) DOMAIN="$OPTARG" ;;
+    p) PORT="$OPTARG" ;;
+    s) SOCKS_PORT="$OPTARG" ;;
+    *) ;;
+  esac
+done
 
-    read -p "请输入 AnyTLS 监听端口 (默认 443): " PORT
-    PORT=${PORT:-443}
+echo -e "${GREEN}[+] 开始部署 Sing-box AnyTLS + Socks5 服务...${PLAIN}"
 
-    read -p "请输入 Socks5 监听端口 (默认 1080): " SOCKS_PORT
-    SOCKS_PORT=${SOCKS_PORT:-1080}
+# 2. 检查并安装基础依赖与 Sing-box 核心
+echo -e "${BLUE}[*] 正在检查依赖环境及安装最新的 Sing-box 核心...${PLAIN}"
+if command -v apt-get &>/dev/null; then
+    apt-get update -y && apt-get install -y curl socat cron tar jq &>/dev/null
+elif command -v yum &>/dev/null; then
+    yum install -y curl socat crontabs tar jq &>/dev/null
+fi
 
-    # 自动生成随机账号密码
-    ANYTLS_PASSWORD=$(head /dev/urandom | tr -dc A-Za-z0-9 | head -c 16)
-    SOCKS_USER="user_$(head /dev/urandom | tr -dc 0-9 | head -c 4)"
-    SOCKS_PASS=$(head /dev/urandom | tr -dc A-Za-z0-9 | head -c 12)
+# 安装支持 AnyTLS 的 Sing-box 预发/最新版 (--prerelease)
+bash <(curl -fsSL https://sing-box.app/deb-install.sh) --prerelease
 
-    # 3. 自动申请 Let's Encrypt 证书
-    echo -e "\033[1;34m[*] 正在通过 acme.sh 申请 TLS 证书...\033[0m"
-    CERT_DIR="/etc/sing-box/cert"
-    mkdir -p "${CERT_DIR}"
-    CERT_PATH="${CERT_DIR}/${DOMAIN}.crt"
-    KEY_PATH="${CERT_DIR}/${DOMAIN}.key"
+# 3. 交互式获取参数 (如果命令行未传入 -d 参数)
+if [ -z "$DOMAIN" ]; then
+    read -p "请输入解析到本机 IP 的域名 (必须): " DOMAIN
+fi
 
-    if [ ! -f "$CERT_PATH" ]; then
-        # 安装 acme.sh
-        curl https://get.acme.sh | sh -s email=admin@${DOMAIN} &> /dev/null
-        ~/.acme.sh/acme.sh --upgrade --auto-upgrade &> /dev/null
-        
-        # 释放 80 端口申请证书
-        systemctl stop nginx &> /dev/null
-        ~/.acme.sh/acme.sh --issue -d ${DOMAIN} --standalone -k ec-256
-        ~/.acme.sh/acme.sh --install-cert -d ${DOMAIN} --ecc \
-            --fullchain-file "${CERT_PATH}" \
-            --key-file "${KEY_PATH}"
-    fi
+if [ -z "$DOMAIN" ]; then
+    echo -e "${RED}[-] 错误：必须提供有效域名！部署终止。${PLAIN}"
+    exit 1
+fi
 
-    if [ ! -f "$CERT_PATH" ]; then
-        echo -e "\033[1;31m[-] 证书申请失败，请确认 80 端口未被占用且域名解析正确！\033[0m"
-        return 1
-    fi
+# 生成随机密码与账号
+ANYTLS_PASSWORD=$(head /dev/urandom | tr -dc A-Za-z0-9 | head -c 16)
+SOCKS_USER="user_$(head /dev/urandom | tr -dc 0-9 | head -c 4)"
+SOCKS_PASS=$(head /dev/urandom | tr -dc A-Za-z0-9 | head -c 12)
 
-    # 4. 生成包含 AnyTLS、Socks5 以及 Fallback 回落机制的配置
-    cat <<EOF > /etc/sing-box/config.json
+# 4. 使用 acme.sh 自动申请 TLS 证书
+echo -e "${BLUE}[*] 正在检查/申请 TLS 证书...${PLAIN}"
+CERT_DIR="/etc/sing-box/cert"
+mkdir -p "${CERT_DIR}"
+CERT_PATH="${CERT_DIR}/${DOMAIN}.crt"
+KEY_PATH="${CERT_DIR}/${DOMAIN}.key"
+
+if [ ! -f "$CERT_PATH" ] || [ ! -f "$KEY_PATH" ]; then
+    # 尝试临时释放 80 端口
+    systemctl stop nginx &>/dev/null
+    systemctl stop apache2 &>/dev/null
+
+    # 安装 acme.sh 并申请证书
+    curl https://get.acme.sh | sh -s email=admin@${DOMAIN} &>/dev/null
+    ~/.acme.sh/acme.sh --upgrade --auto-upgrade &>/dev/null
+    ~/.acme.sh/acme.sh --set-default-ca --server letsencrypt
+    ~/.acme.sh/acme.sh --issue -d "${DOMAIN}" --standalone -k ec-256
+
+    # 安装证书到 sing-box 目录
+    ~/.acme.sh/acme.sh --install-cert -d "${DOMAIN}" --ecc \
+        --fullchain-file "${CERT_PATH}" \
+        --key-file "${KEY_PATH}"
+fi
+
+if [ ! -f "$CERT_PATH" ]; then
+    echo -e "${RED}[-] 错误：TLS 证书申请失败！请确认域名解析正确且 80 端口无防火墙阻拦。${PLAIN}"
+    exit 1
+fi
+
+# 5. 写入 Sing-box 配置文件
+echo -e "${BLUE}[*] 正在生成配置文件...${PLAIN}"
+mkdir -p /etc/sing-box/
+
+cat <<EOF > /etc/sing-box/config.json
 {
   "log": {
     "level": "info",
@@ -111,28 +139,29 @@ function install_anytls_and_socks5() {
 }
 EOF
 
-    # 5. 测试配置并重启服务
-    sing-box check -c /etc/sing-box/config.json
-    if [ $? -ne 0 ]; then
-        echo -e "\033[1;31m[-] Sing-box 配置文件格式验证失败！\033[0m"
-        return 1
-    fi
+# 6. 验证并启动服务
+sing-box check -c /etc/sing-box/config.json
+if [ $? -ne 0 ]; then
+    echo -e "${RED}[-] 配置文件校验错误，启动失败！${PLAIN}"
+    exit 1
+fi
 
-    systemctl restart sing-box
-    systemctl enable sing-box &> /dev/null
+systemctl restart sing-box
+systemctl enable sing-box &>/dev/null
 
-    # 6. 打印客户端信息
-    echo -e "\033[1;32m========================================\033[0m"
-    echo -e "\033[1;32m  AnyTLS + Socks5 节点部署完成！ \033[0m"
-    echo -e "\033[1;32m========================================\033[0m"
-    echo -e "\033[1;33m[AnyTLS 配置]\033[0m"
-    echo -e " 域名 (SNI) : ${DOMAIN}"
-    echo -e " 端口 (Port): ${PORT}"
-    echo -e " 密码 (Password): ${ANYTLS_PASSWORD}"
-    echo -e "----------------------------------------"
-    echo -e "\033[1;33m[Socks5 配置]\033[0m"
-    echo -e " 端口 (Port): ${SOCKS_PORT}"
-    echo -e " 账号 (User): ${SOCKS_USER}"
-    echo -e " 密码 (Pass): ${SOCKS_PASS}"
-    echo -e "\033[1;32m========================================\033[0m"
-}
+# 7. 打印安装结果
+echo -e "${GREEN}====================================================${PLAIN}"
+echo -e "${GREEN}       Sing-box AnyTLS + Socks5 部署成功！          ${PLAIN}"
+echo -e "${GREEN}====================================================${PLAIN}"
+echo -e "${YELLOW}[ AnyTLS 节点配置 (防封防护项) ]${PLAIN}"
+echo -e "  服务端地址 (Address) : ${DOMAIN}"
+echo -e "  端口 (Port)           : ${PORT}"
+echo -e "  密码 (Password)       : ${ANYTLS_PASSWORD}"
+echo -e "  伪装域名 (SNI)        : ${DOMAIN}"
+echo -e "----------------------------------------------------"
+echo -e "${YELLOW}[ Socks5 节点配置 (带明文认证) ]${PLAIN}"
+echo -e "  服务器地址 (IP/Domain): ${DOMAIN}"
+echo -e "  端口 (Port)           : ${SOCKS_PORT}"
+echo -e "  用户名 (User)         : ${SOCKS_USER}"
+echo -e "  密码 (Password)       : ${SOCKS_PASS}"
+echo -e "${GREEN}====================================================${PLAIN}"
