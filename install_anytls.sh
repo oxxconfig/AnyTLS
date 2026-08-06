@@ -198,24 +198,22 @@ CLIENT_JSON=$(cat <<EOF
 EOF
 )
 
-# 9. 保存信息文件并设置快捷打印脚本 info
-cat <<EOF > /etc/sing-box/info.txt
-====================================================
-       Sing-box AnyTLS + Socks5 部署信息
-====================================================
-1. 【Socks5 节点一键导入链接】
-   (适用客户端：苹果 Shadowrocket / 安卓 v2rayNG 、 NekoBox)
-${SOCKS5_URL}
+# 9. 保存带高亮色彩的信息文件与快捷脚本 info
+echo -e "\033[32m====================================================\033[0m
+\033[32m       Sing-box AnyTLS + Socks5 部署信息          \033[0m
+\033[32m====================================================\033[0m
+\033[33m1. 【Socks5 节点一键导入链接】\033[0m
+\033[33m   (适用客户端：苹果 Shadowrocket / 安卓 v2rayNG / NekoBox)\033[0m
+\033[32m${SOCKS5_URL}\033[0m
 ----------------------------------------------------
-2. 【AnyTLS Shadowrocket 苹果小火箭 / NekoBox 客户端】
-   (适用客户端：苹果 Shadowrocket / 安卓 NekoBox)
-${ANYTLS_URL}
+\033[33m2. 【AnyTLS Shadowrocket 苹果小火箭 / NekoBox 客户端】\033[0m
+\033[33m   (适用客户端：苹果 Shadowrocket / 安卓 NekoBox)\033[0m
+\033[32m${ANYTLS_URL}\033[0m
 ----------------------------------------------------
-3. 【Sing-box AnyTLS Outbound JSON】
-   (适用客户端：安卓 Sing-box / Clash Verge)
-${CLIENT_JSON}
-====================================================
-EOF
+\033[33m3. 【Sing-box AnyTLS Outbound JSON】\033[0m
+\033[33m   (适用客户端：安卓 Sing-box / Clash Verge)\033[0m
+\033[36m${CLIENT_JSON}\033[0m
+\033[32m====================================================\033[0m" > /etc/sing-box/info.txt
 
 # 创建快捷命令 `/usr/local/bin/info`
 cat <<'EOF' > /usr/local/bin/info
