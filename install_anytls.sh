@@ -197,8 +197,7 @@ SOCKS5_URL="socks://${SOCKS5_USER_PASS_B64}@${DOMAIN}:${SOCKS_PORT}#${ENCODED_NO
 ANYTLS_URL="anytls://${ANYTLS_PASSWORD}@${DOMAIN}:${PORT}?peer=${DOMAIN}&sni=${DOMAIN}#${ENCODED_NODE_NAME}"
 
 # 1. OpenClash / Mihomo 单行 Inline YAML 格式
-OPENCLASH_INLINE="- {name: \"${NODE_NAME}\", type: anytls, server: ${DOMAIN}, port: ${PORT}, password: \"${ANYTLS_PASSWORD}\", sni: ${DOMAIN}, udp: true, skip-cert-verify: false}"
-
+OPENCLASH_INLINE="- { name: \"${NODE_NAME}\", type: anytls, server: ${DOMAIN}, port: ${PORT}, password: \"${ANYTLS_PASSWORD}\", sni: ${DOMAIN}, client-fingerprint: chrome, udp: true, skip-cert-verify: false}"
 # 2. Sing-box Outbound JSON 格式
 CLIENT_JSON=$(cat <<EOF
 {
