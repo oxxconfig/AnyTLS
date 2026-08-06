@@ -191,11 +191,15 @@ fi
 NODE_NAME="${FLAG}${SUB_DOMAIN}"
 ENCODED_NODE_NAME=$(echo -n "${NODE_NAME}" | jq -sRr @uri)
 
-# 生成一键导入链接
+# 生成一键导入链接与各类配置格式
 SOCKS5_USER_PASS_B64=$(echo -n "${SOCKS_USER}:${SOCKS_PASS}" | base64 -w 0)
 SOCKS5_URL="socks://${SOCKS5_USER_PASS_B64}@${DOMAIN}:${SOCKS_PORT}#${ENCODED_NODE_NAME}"
 ANYTLS_URL="anytls://${ANYTLS_PASSWORD}@${DOMAIN}:${PORT}?peer=${DOMAIN}&sni=${DOMAIN}#${ENCODED_NODE_NAME}"
 
+# 1. OpenClash / Mihomo 单行 Inline YAML 格式
+OPENCLASH_INLINE="- {name: \"${NODE_NAME}\", type: anytls, server: ${DOMAIN}, port: ${PORT}, password: \"${ANYTLS_PASSWORD}\", sni: ${DOMAIN}, udp: true, skip-cert-verify: false}"
+
+# 2. Sing-box Outbound JSON 格式
 CLIENT_JSON=$(cat <<EOF
 {
   "type": "anytls",
@@ -211,17 +215,6 @@ CLIENT_JSON=$(cat <<EOF
 EOF
 )
 
-OPENCLASH_YAML=$(cat <<EOF
-- name: "${NODE_NAME}"
-  type: anytls
-  server: ${DOMAIN}
-  port: ${PORT}
-  password: "${ANYTLS_PASSWORD}"
-  sni: ${DOMAIN}
-  skip-cert-verify: false
-EOF
-)
-
 # 9. 保存带高亮色彩的信息文件与快捷脚本 info
 echo -e "\033[32m====================================================\033[0m
 \033[32m       Sing-box AnyTLS + Socks5 部署信息          \033[0m
@@ -234,9 +227,9 @@ echo -e "\033[32m====================================================\033[0m
 \033[33m   (适用客户端：苹果 Shadowrocket / 安卓 NekoBox)\033[0m
 \033[32m${ANYTLS_URL}\033[0m
 ----------------------------------------------------
-\033[33m3. 【OpenClash / Mihomo 节点 YAML 配置】\033[0m
-\033[33m   (适用客户端：OpenClash / Clash Verge Rev / Flclash)\033[0m
-\033[35m${OPENCLASH_YAML}\033[0m
+\033[33m3. 【OpenClash / Mihomo 单行 YAML 节点配置】\033[0m
+\033[33m   (适用客户端：OpenClash / Clash Verge / Flclash)\033[0m
+\033[35m${OPENCLASH_INLINE}\033[0m
 ----------------------------------------------------
 \033[33m4. 【Sing-box AnyTLS Outbound JSON】\033[0m
 \033[33m   (适用客户端：安卓 Sing-box / SBOX)\033[0m
