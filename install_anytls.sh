@@ -194,7 +194,7 @@ ENCODED_NODE_NAME=$(echo -n "${NODE_NAME}" | jq -sRr @uri)
 # 生成一键导入链接与各类配置格式
 SOCKS5_USER_PASS_B64=$(echo -n "${SOCKS_USER}:${SOCKS_PASS}" | base64 -w 0)
 SOCKS5_URL="socks://${SOCKS5_USER_PASS_B64}@${DOMAIN}:${SOCKS_PORT}#${ENCODED_NODE_NAME}"
-ANYTLS_URL="anytls://${ANYTLS_PASSWORD}@${DOMAIN}:${PORT}?peer=${DOMAIN}&sni=${DOMAIN}#${ENCODED_NODE_NAME}"
+ANYTLS_URL="anytls://${ANYTLS_PASSWORD}@${DOMAIN}:${PORT}?peer=${DOMAIN}&sni=${DOMAIN}&fp=chrome#${ENCODED_NODE_NAME}"
 
 # 1. OpenClash / Mihomo 单行 Inline YAML 格式
 OPENCLASH_INLINE="- { name: \"${NODE_NAME}\", type: anytls, server: ${DOMAIN}, port: ${PORT}, password: \"${ANYTLS_PASSWORD}\", sni: ${DOMAIN}, client-fingerprint: chrome, udp: true, skip-cert-verify: false}"
